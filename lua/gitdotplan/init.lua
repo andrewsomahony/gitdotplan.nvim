@@ -1,9 +1,18 @@
 local M = {}
 
--- Our short repo variable for updating our gitdotplan file
-local short_repo = nil
+-- !!! We have to have this as nvim currently uses an older Lua as its internal Lua
+table.unpack = table.unpack or unpack
 
--- Gets the runtime path of our filename
+-- Our short repo variable for updating our gitdotplan file
+local repo_to_update = nil
+
+local name_to_filename_map = {
+  ["plan"] = ".plan",
+  ["project"] = ".project",
+  ["profile"] = ".profile"
+}
+
+-- Gets the runtime path of the specified filename
 local function get_runtime_path(filename)
   local paths = vim.api.nvim_get_runtime_file(filename, true)
   if #paths > 0 then
@@ -13,9 +22,21 @@ local function get_runtime_path(filename)
   end
 end
 
--- Process our gitdotplan result to convert the string into a table, separated
--- by newlines
-local function process_gitdotplan_result(result_string)
+-- Runs a Python script with the given name and parameters
+-- The method finds the actual runtime path automatically, and prepends it
+-- and the "python" command to the final command table
+local function run_gitdotplan_python_script(script_name, parameters)
+  -- Get the full path to our Python script
+  local runtime_path = get_runtime_path(script_name)
+
+  -- Run our command
+  -- !!! Why is there no easy way to concatenate arrays in Lua??
+  return vim.fn.system {"python", runtime_path, table.unpack(parameters)}
+end
+
+-- Convert a string separated by newlines to a table, with each line
+-- as a table entry
+local function convert_string_to_table(result_string)
   local return_value = {}
   -- We want to match all non-newline strings, but include blank lines as
   -- well, as they will be part of the gitdotplan content
@@ -25,39 +46,64 @@ local function process_gitdotplan_result(result_string)
   return return_value
 end
 
--- Function to finger a URL
-function M.finger()
-    -- !!! The short repo is for updating, but we are using it for fingering, temporarily
-    -- !!! Maybe we can build some sort of tab completion in with a pre-specified list in the opts?
-    if short_repo then
-      -- Get the full path to our finger.py script, so we can run it with python
-      local finger_path = get_runtime_path("finger.py")
-      -- Run our finger command using our external Python script
-      -- !!! We need to process the return code here to make sure the command succeeded
-      local command_result = vim.fn.system {"python", finger_path, "--short-repo", short_repo}
-      -- Set our buffer's content to our finger result
-      vim.api.nvim_buf_set_lines(0, 0, 0, false, process_gitdotplan_result(command_result))
-      -- Set our buffer name
-      vim.api.nvim_buf_set_name(0, ".gitdotplan")
-      -- Set our buffer to readonly
-      vim.api.nvim_buf_set_option(0, "readonly", true)
-      -- Set our buffer to not be allowed to be modifiable
-      vim.api.nvim_buf_set_option(0, "modifiable", false)
-      -- Set our modified boolean to false on the buffer to avoid an
-      -- nvim warning when we close the buffer
-      vim.api.nvim_buf_set_option(0, "modified", false)
-      -- Jump to the top of our buffer
-      vim.cmd("norm! gg")
+-- Utility function to fill a buffer, set its name, and set if it's readonly or not
+local function fill_buffer(buffer_number, buffer_name, result_string, is_readonly)
+  vim.api.nvim_buf_set_lines(buffer_number, 0, 0, false, convert_string_to_table(result_string))
+  -- Set our buffer name
+  vim.api.nvim_buf_set_name(buffer_number, buffer_name)
+  if is_readonly then
+    -- Set our buffer to readonly
+    vim.api.nvim_buf_set_option(buffer_number, "readonly", true)
+    -- Set our buffer to not be allowed to be modifiable
+    vim.api.nvim_buf_set_option(buffer_number, "modifiable", false)
+    -- Set our modified boolean to false on the buffer to avoid an
+    -- nvim warning when we close the buffer
+    vim.api.nvim_buf_set_option(buffer_number, "modified", false)
+  else
+    -- Set our modified boolean to false on the buffer to avoid an
+    -- nvim warning when we close the buffer
+    vim.api.nvim_buf_set_option(buffer_number, "modified", false)
+  end
+  -- Jump to the top of our buffer
+  vim.cmd("norm! gg")
+end
+
+-- Loads an update into a new buffer.  The "update" function performs the actual update
+function M.load_update(name)
+  if not repo_to_update then
+    error("No gitdotplan repo configured.  Please set with the repo_to_update setup parameter")
+  else
+    if not name_to_filename_map[name] then
+      error("No filename for " .. name)
     else
-      -- Throw an error if we have no short_repo supplied
-      error("No repo supplied, please set with the opts.short_repo variable")
+      -- Set our filename
+      local filename = name_to_filename_map[name]
+      local fetch_result = run_gitdotplan_python_script("finger.py", {"--repo", repo_to_update, "--file", filename})
+
+      -- Open a new buffer in the current window
+      vim.api.nvim_cmd({cmd = "enew"}, {output = false})
+      -- Set our buffer's content to our finger result
+      -- !!! Make a better title!
+      fill_buffer(0, filename, fetch_result, false)
     end
+  end
+end
+
+-- Function to finger a URL
+function M.finger(repo_url)
+  local finger_result = run_gitdotplan_python_script("finger.py", {"--repo", repo_url})
+
+  -- Open a new buffer in the current window
+  vim.api.nvim_cmd({cmd = "enew"}, {output = false})
+  -- Set our buffer's content to our finger result
+  -- !!! Make a better title!
+  fill_buffer(0, repo_url .. ".gitdotplan", finger_result, true)
 end
 
 function M.setup(opts)
   -- Set our short repo if we have it
-  if opts.short_repo then
-    short_repo = opts.short_repo
+  if opts.repo_to_update then
+    repo_to_update = opts.repo_to_update
   end
 end
 
