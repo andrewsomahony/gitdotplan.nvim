@@ -11,7 +11,7 @@ local repo_to_update = nil
 local current_buffer_update_number = nil
 -- This variable stores the update type of the current update buffer,
 -- which isn't the filename, but the type that we pass into the update script
-local current_buffer_update_filename = nil
+local current_buffer_update_type = nil
 
 local name_to_filename_map = {
   ["plan"] = ".plan",
@@ -112,8 +112,6 @@ function M.update()
     local buffer_contents = vim.api.nvim_buf_get_lines(current_buffer_id, 0, -1, false)
     -- Run our update script by piping the buffer contents into the update script
     run_gitdotplan_python_script("update.py", {"--repo", repo_to_update, "--file", current_buffer_update_filename}, buffer_contents)
-    -- Mark our buffer as modified
-    vim.api.nvim_buf_set_option(current_buffer_id, "modified", false)
   end
 end
 
