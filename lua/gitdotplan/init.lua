@@ -94,7 +94,6 @@ function M.prepare_update(name)
       -- Set our buffer's content to our finger result
       -- !!! Make a better title!
       fill_buffer(0, filename, fetch_result.stdout, false)
-      print("New update buffer number: " .. current_buffer_update_number)
     end
   end
 end
