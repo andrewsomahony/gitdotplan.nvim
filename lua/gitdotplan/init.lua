@@ -89,11 +89,16 @@ function M.prepare_update(name)
 
       -- Open a new buffer in the current window
       vim.api.nvim_cmd({cmd = "enew"}, {output = false})
+      -- Set the current buffer to readonly
       current_buffer_update_number = vim.api.nvim_get_current_buf()
       current_buffer_update_filename = filename
+
       -- Set our buffer's content to our finger result
       -- !!! Make a better title!
       fill_buffer(0, filename, fetch_result.stdout, false)
+
+      vim.api.nvim_buf_set_option(current_buffer_update_number, "buftype", "nofile")
+      vim.api.nvim_buf_set_option(current_buffer_update_number, "modifiable", true)
     end
   end
 end
